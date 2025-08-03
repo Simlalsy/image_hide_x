@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>幻影图在线生成器</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --primary     : #4f46e5;
+      --primary-dark: #3730a3;
+      --bg          : #f7fafc;
+      --card        : #ffffff;
+      --text        : #1e293b;
+      --muted       : #64748b;
+      --border      : #e2e8f0;
+      --radius      : 8px;
+      --shadow      : 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:'Poppins',sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      line-height:1.5;
+      padding:20px;
+    }
+    h2{margin-bottom:20px;font-weight:600;}
+    h3{margin:20px 0 12px;font-size:1.1rem;}
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:24px;
+      margin-bottom:24px;
+      box-shadow:var(--shadow);
+    }
+
+    .grid{
+      display:grid;
+      gap:20px;
+      grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    }
+    label{
+      display:flex;
+      flex-direction:column;
+      font-weight:400;
+      font-size:.9rem;
+    }
+    label span{margin-bottom:4px;color:var(--muted);}
+    input[type="number"]{
+      padding:6px 8px;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      width:100%;
+    }
+    input[type="file"]{
+      border:1px solid var(--border);
+      padding:4px;
+      border-radius:var(--radius);
+      font-size:.85rem;
+    }
+
+    /* 滑动开关 */
+    .switch{
+      position:relative;
+      display:inline-block;
+      width:46px;
+      height:24px;
+    }
+    .switch input{opacity:0;width:0;height:0}
+    .slider{
+      position:absolute;
+      cursor:pointer;
+      top:0;left:0;right:0;bottom:0;
+      background:#ccc;
+      transition:.3s;
+      border-radius:24px;
+    }
+    .slider:before{
+      position:absolute;
+      content:"";
+      height:18px;width:18px;
+      left:3px;bottom:3px;
+      background:white;
+      transition:.3s;
+      border-radius:50%;
+    }
+    input:checked + .slider{background:var(--primary)}
+    input:checked + .slider:before{transform:translateX(22px)}
+
+    button{
+      background:var(--primary);
+      color:#fff;
+      border:none;
+      padding:10px 22px;
+      border-radius:var(--radius);
+      font-size:1rem;
+      cursor:pointer;
+      transition:background .2s;
+    }
+    button:hover{background:var(--primary-dark)}
+
+    canvas{
+      max-width:100%;
+      height:auto;
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+    }
+    a[download]{
+      display:inline-block;
+      margin-top:12px;
+      color:var(--primary);
+      font-weight:600;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>幻影图在线生成（光菱坦克）</h2>
+
+  <div class="grid">
+    <div class="card">
+      <h3>上传图片</h3>
+      <label>
+        <span>原图</span>
+        <input type="file" id="originalInput" accept="image/*" />
+      </label>
+      <label>
+        <span>隐藏图</span>
+        <input type="file" id="hiddenInput" accept="image/*" />
+      </label>
+    </div>
+
+    <div class="card">
+      <h3>参数调节</h3>
+      <label>
+        <span>原图亮度提高 (%)</span>
+        <input type="number" id="originalBrightness" value="100" min="0" max="200" />
+      </label>
+      <label>
+        <span>隐藏图亮度降低 (%)</span>
+        <input type="number" id="hiddenBrightness" value="90" min="0" max="100" />
+      </label>
+      <label>
+        <span>原图对比度 (%)</span>
+        <input type="number" id="originalContrast" value="20" min="10" max="300" />
+      </label>
+      <label>
+        <span>隐藏图对比度 (%)</span>
+        <input type="number" id="hiddenContrast" value="100" min="10" max="300" />
+      </label>
+    </div>
+  </div>
+
+  <div class="card">
+    <label style="flex-direction:row;align-items:center;gap:8px;margin-bottom:16px;">
+      <span>生成后自动下载</span>
+      <label class="switch">
+        <input type="checkbox" id="autoDownload" />
+        <span class="slider"></span>
+      </label>
+    </label>
+
+    <button id="generate">生成图像</button>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h3>输出图</h3>
+    <canvas id="outputCanvas"></canvas>
+    <br />
+    <a id="downloadLink" style="display:none;">下载生成的幻影图 (PNG)</a>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const originalInput  = $('#originalInput');
+    const hiddenInput    = $('#hiddenInput');
+    const canvas         = $('#outputCanvas');
+    const generateBtn    = $('#generate');
+    const downloadLink   = $('#downloadLink');
+    const resultCard     = $('#resultCard');
+    const autoDownload   = $('#autoDownload');
+
+    /* 工具函数 ----------------------------------------------------------- */
+    const loadImage = file =>
+      new Promise(res=>{
+        const img = new Image();
+        img.onload = () => res(img);
+        img.src = URL.createObjectURL(file);
+      });
+
+    const drawToCanvas = (img,w,h)=>{
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      return c;
+    };
+
+    const adjust = (r,g,b,bright,contrast)=>{
+      const br = [r,g,b].map(v=>v*bright);
+      const adj = v=>Math.min(255,Math.max(0,(v-128)*contrast+128));
+      return br.map(adj);
+    };
+
+    /* 主流程 ------------------------------------------------------------- */
+    generateBtn.onclick = async ()=>{
+      if(!originalInput.files[0]||!hiddenInput.files[0]){
+        alert('请上传原图和隐藏图');return;
+      }
+
+      const ob = parseInt($('#originalBrightness').value)/100;
+      const hb = 1-parseInt($('#hiddenBrightness').value)/100;
+      const oc = parseInt($('#originalContrast').value)/100;
+      const hc = parseInt($('#hiddenContrast').value)/100;
+
+      const [origImg,hidImg] = await Promise.all([
+        loadImage(originalInput.files[0]),
+        loadImage(hiddenInput.files[0])
+      ]);
+
+      const {width, height} = origImg;
+      canvas.width  = width;
+      canvas.height = height;
+
+      const oCan = drawToCanvas(origImg,width,height);
+      const hCan = drawToCanvas(hidImg,width,height);
+      const oDat = oCan.getContext('2d').getImageData(0,0,width,height);
+      const hDat = hCan.getContext('2d').getImageData(0,0,width,height);
+      const res  = new ImageData(width,height);
+
+      for(let i=0;i<oDat.data.length;i+=4){
+        const idx=i/4;
+        const x=idx%width,y=Math.floor(idx/width);
+        const [r,g,b] = (x+y)%2===0
+          ? adjust(oDat.data[i],oDat.data[i+1],oDat.data[i+2],1+ob,oc)
+          : adjust(hDat.data[i],hDat.data[i+1],hDat.data[i+2],hb,hc);
+        res.data.set([r,g,b,255],i);
+      }
+      canvas.getContext('2d').putImageData(res,0,0);
+
+      resultCard.style.display='block';
+      downloadLink.href = canvas.toDataURL('image/png');
+      downloadLink.download = 'phantom_tank.png';
+      downloadLink.style.display='inline-block';
+
+      if(autoDownload.checked){
+        const a = document.createElement('a');
+        a.href = downloadLink.href;
+        a.download = downloadLink.download;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    };
+  </script>
+</body>
+</html>
